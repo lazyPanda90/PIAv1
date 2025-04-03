@@ -22,18 +22,24 @@ def create_data_loaders(
         num_workers: Number of workers for data loading
         transform: Optional transform to apply to the data
     """
+    
+    # Create a training datset object using a spesific folder, classes and option transformer
     train_dataset = CSSWebdataset(
         root_dir=train_root,
         class_names=class_names,
         transform=transform
     )
     
+    # Create a test datset object using a spesific folder, classes and option transformer
     test_dataset = CSSWebdataset(
         root_dir=test_root,
         class_names=class_names,
         transform=transform
     )
     
+    #Create a PyTorch Dataloader for training set
+    # shufte=True: Randomizes data order for each epoch
+    # num_workers: number of background threads for loading data
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
@@ -41,6 +47,8 @@ def create_data_loaders(
         num_workers=num_workers
     )
     
+    #Create a PyTorch Dataloader for test set
+    # shufte=False: keeps the same order for evalutaion
     test_loader = DataLoader(
         test_dataset,
         batch_size=batch_size,
@@ -50,6 +58,9 @@ def create_data_loaders(
     
     return train_loader, test_loader
 
+# Trains a PyTorch model
+# Takes model, data, optimizer, loss, scheduler and devise as input
+#Return the best-performing model
 def train(
     model: nn.Module,
     train_loader: DataLoader,
@@ -72,37 +83,49 @@ def train(
         num_epochs: Number of epochs to train
         device: Device to train on
     """
+
+    # Keeps track of the highest tst accuracy seen so far
     best_test_acc = 0.0
 
     for epoch in range(num_epochs):
         print(f"Epoch {epoch+1}/{num_epochs}")
 
-        # Training
+        # Training Phase
+        # Sets the model to training mode(activates dropout and batch normalization)
         model.train()
+
+        # Initialize training metrics
         train_loss = 0.0
         train_correct = 0
         train_total = 0
 
         print("Training...")
 
+        # Loop through training batches
         for batch_idx, batch in enumerate(train_loader):
-            # Move data to device
+            # Move batch data to the GPU or CPU
             css_features = batch['css_features'].to(device)
             bbox_features = batch['bbox_features'].to(device)
             labels = batch['label'].to(device)
 
-            # Forward pass
+            # Forward pass through the model
             outputs = model(css_features, bbox_features)
+            # Compute loss (eg., CrossEntropy between predicted and true labels)
             loss = criterion(outputs, labels)
 
-            # Backward pass and optimization
+            # Standard PyTorck training step
+            # Resets gradients to zero
+            # Backpropagates the loss
+            # Update weights
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-            # Update training metrics
+            # Add current batch loss to total training loss
             train_loss += loss.item()
+            #Get predicted class by taking the index of the max output value
             _, predicted = outputs.max(1)
+            # Update total count and correct predictions
             train_total += labels.size(0)
             train_correct += (predicted == labels).sum().item()
 
@@ -112,6 +135,7 @@ def train(
                       f"Accuracy: {100.*train_correct/train_total:.2f}%")
                 
         # Validation phase
+        # Switch to evaluation mode (disables dropout and batch normalization)
         model.eval()
         test_loss = 0.0
         test_correct = 0
@@ -119,7 +143,9 @@ def train(
 
         print("Validating...")
 
+        # Disables gradient tracking (saves memory and speeds up evaluation)
         with torch.no_grad():
+            # Runs inference and collects loss and accuracy for the test set
             for batch_idx, batch in enumerate(test_loader):
                 css_features = batch['css_features'].to(device)
                 bbox_features = batch['bbox_features'].to(device)
@@ -141,13 +167,13 @@ def train(
         test_acc = 100.*test_correct/test_total
         print(f"Validation Accuracy: {test_acc:.2f}%")
 
-        # Save model if it has the highest accuracy so far
+        # Save model checkpoint if the accuracy improves
         if test_acc > best_test_acc:
             best_test_acc = test_acc
             torch.save(model.state_dict(), "best_model.pth")
             print("Model saved")
 
-        # Update learning rate
+        # Update learning rate (depending on scheduler logic)
         scheduler.step()
 
     print("Training complete")
@@ -163,12 +189,12 @@ def train(
 
     print("Testing...")
 
-    with.torch.no_grad()
-        for batch_idx, (css_features, bbox_features, labels) in enumerate(test_loader):
+    with torch.no_grad():
+        for batch_idx, batch in enumerate(test_loader):
              #move data to device
-             css_features = css_features.to(device)
-             bbox_features = bbox_features.to(device)
-             labels = labels.to(device)
+             css_features = batch['css_features'].to(device)
+             bbox_features = batch['bbox_features'].to(device)
+             labels = batch['label'].to(device)
 
              #Forward pass
              outputs = model(css_features, bbox_features)
@@ -181,6 +207,5 @@ def train(
              test_correct += (predicted == labels).sum().item()
 
              if batch_idx % 100 == 0:
-                  print(f"Batch {batch_idx}/{len(test_loader)} - Loss: {test_loss/{batch_idx+1}:.4f}, Accuracy: {100.*test_correct/test_total:.2f}%")
+                  print(f"Batch {batch_idx}/{len(test_loader)} - Loss: {test_loss/(batch_idx+1):.4f}, Accuracy: {100.*test_correct/test_total:.2f}%")
                 
-        #Calculate epoch statistics
