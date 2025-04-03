@@ -1,11 +1,14 @@
 import os
+import pandas as pd
+import numpy as np
 from torch.utils.data import Dataset
+from typing import List, Optional, Callable
 
 class CSSWebdataset(Dataset):
     
     def __init__(
         self,
-        root_dir,
+        root_dir: str,
         class_names: List[str],
         transform: Optional[Callable] = None,
     ):
@@ -15,7 +18,7 @@ class CSSWebdataset(Dataset):
     
         print(f"Initializing CSSWebdataset with {len(class_names)} classes")
 
-        self.csv:files = []
+        self.csv_files = []
         countries_processed = set()
         total_countries = len([d for d in os.listdir(root_dir) if os.path.isdir(os.path.join(root_dir, d))])
         processed_countries = 0
@@ -28,20 +31,20 @@ class CSSWebdataset(Dataset):
             processed_countries += 1
 
             if country_dir not in countries_processed:
-            print(f"Processing country {country_dir} ({processed_countries}/{total_countries})")
-            countries_processed.add(country_dir)
+                print(f"Processing country {country_dir} ({processed_countries}/{total_countries})")
+                countries_processed.add(country_dir)
 
             for website_dir in os.listdir(country_path):
                 website_path = os.path.join(country_path, website_dir)
                 if not os.path.isdir(website_path):
                     continue
                 
-                for page_dir in os.listdir(website_dir):
+                for page_dir in os.listdir(website_path):
                     page_path = os.path.join(website_path, page_dir)
                     if not os.path.isdir(page_path):
                         continue
 
-                    csv_path = os.oath.join(page_path, 'elements.csv')
+                    csv_path = os.path.join(page_path, 'elements.csv')
                     if os.path.exists(csv_path):
                         self.csv_files.append(csv_path)
 
@@ -57,8 +60,7 @@ class CSSWebdataset(Dataset):
             print("        elements.csv")
 
         self.data = []
-        self.labels = []
-        total_countries = 0
+        total_elements = 0
 
         print("Loading data from CSV files...")
 
@@ -69,19 +71,19 @@ class CSSWebdataset(Dataset):
             try:
                 df = pd.read_csv(csv_file)
                 
-                css_features = self._process_css_features(df)
+                # Extract pre-encoded features directly from CSV
+                css_features = df.iloc[:, 4:-1].values  # Skip x,y,width,height and label columns
+                bbox_features = df[['x', 'y', 'width', 'height']].values
+                labels = df['label'].values
 
-                bbox_features = = df[['x', 'y', 'width', 'height']].values
-                
-                label = self._process_label(df)
-
+                # Validate labels
                 if not all(0 <= label < len(self.class_names) for label in labels):
-                    raise ValueError(f"Found labels outsite the expected range [0, {len(self.class_names)}]")
+                    raise ValueError(f"Found labels outside the expected range [0, {len(self.class_names)}]")
                 
                 self.data.append({
                     'css_features': css_features,
                     'bbox_features': bbox_features,
-                    'label': label
+                    'label': labels
                 })
                 total_elements += len(labels)
 
@@ -90,26 +92,13 @@ class CSSWebdataset(Dataset):
 
         print(f"\nLoaded {len(self.data)} pages with total of {total_elements} elements")
             
-    def _process_css_features(self, df: pd.DataFrame) -> np.ndarray:
-
-        display_map = {
-            'none': 0,
-            'block': 1,
-            'inline': 2,
-            'inline-block': 3}
-        visibility_map = {
-            'visible': 0,
-            'hidden': 1,
-        }
-        text_align_map = {
-            'left': 0,
-            'center': 1,
-            'right': 2,
-            'justify': 3,
-        }
-
-        features = []
-
+    def __len__(self):
+        return len(self.data)
         
+    def __getitem__(self, idx):
+        item = self.data[idx]
+        
+        if self.transform:
+            item = self.transform(item)
             
-        }
+        return item
