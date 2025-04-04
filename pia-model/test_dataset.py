@@ -33,10 +33,26 @@ def test_dataset():
             for key, tensor in batch.items():
                 print(f"{key}: {tensor.dtype}")
             
-            # Verify value ranges
-            print("\nValue ranges:")
+            # Print detailed bbox information
+            print("\nBbox feature details:")
+            print(f"Shape: {batch['bbox_features'].shape}")  # Should be [batch_size, max_elements, 4]
+            print("\nFirst element's bbox features:")
+            first_element = batch['bbox_features'][0][0]  # First element of first page
+            print(f"x: {first_element[0]:.2f}")
+            print(f"y: {first_element[1]:.2f}")
+            print(f"width: {first_element[2]:.2f}")
+            print(f"height: {first_element[3]:.2f}")
+            
+            # Print value ranges for each bbox component
+            print("\nBbox value ranges:")
+            print(f"x range: [{batch['bbox_features'][..., 0].min():.2f}, {batch['bbox_features'][..., 0].max():.2f}]")
+            print(f"y range: [{batch['bbox_features'][..., 1].min():.2f}, {batch['bbox_features'][..., 1].max():.2f}]")
+            print(f"width range: [{batch['bbox_features'][..., 2].min():.2f}, {batch['bbox_features'][..., 2].max():.2f}]")
+            print(f"height range: [{batch['bbox_features'][..., 3].min():.2f}, {batch['bbox_features'][..., 3].max():.2f}]")
+            
+            # Print CSS feature ranges
+            print("\nCSS feature ranges:")
             print(f"CSS features: [{batch['css_features'].min():.3f}, {batch['css_features'].max():.3f}]")
-            print(f"Bbox features: [{batch['bbox_features'].min():.3f}, {batch['bbox_features'].max():.3f}]")
             print(f"Labels: [{batch['label'].min()}, {batch['label'].max()}]")
             
         except Exception as e:
